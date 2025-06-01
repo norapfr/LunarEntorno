@@ -21,15 +21,21 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # https://www.nature.com/articles/nature14236 (Human level control through RL)
 # https://www.lesswrong.com/posts/kyvCNgx9oAwJCuevo/deep-q-networks-explained
 
+
+#DQN necesita redes q sean porfundas, entrenen rapido y no sufran de gradientes debiles
 class DQN(nn.Module):
     def __init__(self, state_size, action_size, hidden_size=64):
         super(DQN,self).__init__()
-        self.fc1=nn.Linear(state_size,hidden_size)
-        self.fc2=nn.Linear(hidden_size,hidden_size)
-        self.fc3=nn.Linear(hidden_size,hidden_size)
-        self.out= nn.Linear(hidden_size,action_size)
+        #definimos la red feedforward
+        self.fc1=nn.Linear(state_size,hidden_size) #capa de entrada->tiene tantos nodos como estado tiene el problema
+        self.fc2=nn.Linear(hidden_size,hidden_size) #primera capa oculta->64
+        self.fc3=nn.Linear(hidden_size,hidden_size) # segunda capa oculta->64
+        self.out= nn.Linear(hidden_size,action_size) #capa de salida-> nodos son el numero de acciones que tiene el problema
     
     #esto lo añado yo
+    #indica como se conectan las capas definidas anteriormente
+    # usamos relu pq mantiene un gradiente constante, lo q facilita el entrenamiento de redes profundas al evitar q los gradientes se vuelvan insignificantes durante la retropropagacion
+    #ademas es simple y requiere menos recursos-> se usa en dqn para modelar la funcion de valor
     def forward(self,state):
         x=torch.relu(self.fc1(state))
         x=torch.relu(self.fc2(x))
@@ -37,6 +43,8 @@ class DQN(nn.Module):
         return self.out(x)
     #puede requerir mas funciones segun la libreria escogida.
     
+
+ #almacena experiencias pasadas del agente   
 class ReplayBuffer():
     def __init__(self, buffer_size=10000):
         self.buffer = deque(maxlen=buffer_size) # deque es una doble cola que permite añadir y quitar elementos de ambos extremos
@@ -45,15 +53,21 @@ class ReplayBuffer():
        
     def push(self, state, action, reward, next_state, done):
         # insert into buffer
-      #  e=self.experience(state,action,reward,next_state,done)
         self.buffer.append((state,action,reward,next_state,done))
-        #self.buffer.append((state,action,reward,next_state,done))
-        # pass
+        
         
     def sample(self, batch_size):
         # get a batch of experiences from the buffer
-        states, actions, rewards, next_states, dones = zip(*random.sample(self.buffer, batch_size))
-        return np.stack(states), actions, rewards, np.stack(next_states), dones
+        #pillamos una muestra random del buffer-> cada elemento es una tupla de experiencia
+        batch = random.sample(self.buffer, batch_size)
+    
+        states = np.array([experience[0] for experience in batch]) #pilla todos los states de la muestra random
+        actions = np.array([experience[1] for experience in batch])
+        rewards = np.array([experience[2] for experience in batch])
+        next_states = np.array([experience[3] for experience in batch])
+        dones = np.array([experience[4] for experience in batch])
+        
+        return states, actions, rewards, next_states, dones
     
     def __len__(self):
         return len(self.buffer)
@@ -127,7 +141,8 @@ class DQNAgent():
 
        # Set target network to evaluation mode
         self.target_network.eval()
-        #lo añado yo
+        #se pone en modo evaluacion para q no se actualice grandiantes
+        # la red target solo se actualiza cada x tiempo para estabilizar el aprendizaje-> se usa para hacer predicciones o para entrenar 
       
         self.optimizer = torch.optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
         # depende del framework que uses (tf o pytorch)
@@ -146,6 +161,7 @@ class DQNAgent():
         if np.random.rand()<self.epsilon:
             action = random.choice(np.arange(self.action_size)) #accion aleatoria->exploracion
         else:
+            #pasamos el estado por la red para obtener los valores Q y escogemos la accion con el Q mas alto
             state_tensor = torch.from_numpy(state).float().unsqueeze(0).to(device)
             with torch.no_grad():
                 q_value= self.q_network(state_tensor)
@@ -162,7 +178,7 @@ class DQNAgent():
         and updates the model using the computed loss.
         """
        
-        #ya los convierto en tensores en sample no hace falta hacerlo otra vez
+      
         states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
         states = torch.from_numpy(states).float().to(device)
         actions = torch.from_numpy(np.array(actions)).long().to(device)
@@ -171,8 +187,10 @@ class DQNAgent():
         dones = torch.from_numpy(np.array(dones).astype(np.uint8)).float().to(device)
 
         q_values = self.q_network(states).gather(1, actions.unsqueeze(-1)).squeeze(-1)
+        #gather seleciona la Q para las acciones tomadas
+
         next_q_values = self.target_network(next_states).max(1)[0].detach()
-        # 5. Compute the expected Q-values
+        # obtiene el maximo q para los siguinetes estado de la red objetivo y usamos detach para q no se calcule el gradiente
         expected_q_values = rewards + self.gamma * next_q_values * (1 - dones)
 
         loss = F.mse_loss(q_values, expected_q_values)
@@ -206,10 +224,10 @@ class DQNAgent():
         Returns:
         None
         """
-        # cargar el modelo desde el path indicado
-        self.q_network.load_state_dict(torch.load(path))
-        self.q_network.eval()
         
+        self.q_network.load_state_dict(torch.load(path))
+        self.q_network.eval()  # Modo evaluación
+           
     def train(self):
         """
         Train the DQN agent on the given environment for a specified number of episodes.
@@ -229,7 +247,7 @@ class DQNAgent():
             while not done:
                 #eligumos una accion y la ejecutamos
                 next_state, reward, done, action = self.act()
-                self.memory.push(state, action, reward, next_state, done)
+                self.memory.push(state, action, reward, next_state, done) #se guarda la experiencia en memoria
 
                
                 state = next_state
@@ -238,7 +256,15 @@ class DQNAgent():
                 if len(self.memory) >= self.batch_size:
                     loss = self.update_model()
                 else:
-                     loss = 0.0
+                    loss = 0.0
+   
+
+            # de cada episodio, se hace el replay extra:
+            #se hace un "repaso del episodio" -> hace q aprenda mejor y se prepara para el siguiente
+            for _ in range(self.replays_per_episode):
+                if len(self.memory) >= self.batch_size:
+                    loss = self.update_model()
+
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
             if episode % self.target_updt_freq == 0:
