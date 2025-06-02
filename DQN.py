@@ -78,7 +78,7 @@ class DQNAgent():
                 learning_rate=0.001, batch_size=64, 
                 memory_size=10000, episodes=1500, 
                 target_network_update_freq=10,
-                replays_per_episode=1000):
+                replays_per_episode=10):
         """
         Initialize the DQN agent with the given parameters.
         
@@ -133,7 +133,7 @@ class DQNAgent():
         self.target_network = DQN(
             state_size=observation_space.shape[0],
             action_size=action_space.n,
-            hidden_size=64 #elegir un tamaño de capa oculta
+            hidden_size=64#elegir un tamaño de capa oculta
         ).to(device)
         
         # Set weights of target network to be the same as those of the q network
@@ -271,7 +271,7 @@ class DQNAgent():
              self.update_target_network()
             print(f"Ep {episode:4d} | Reward: {total_reward:8.2f} | Eps: {self.epsilon:.3f} | Loss: {loss:.4f}")
            # Verifica si se resolvió el entorno
-            if total_reward >= 200:
+            if total_reward >= 200 and done:
                  success_count += 1
                  print(success_count)
         success_rate = success_count / self.episodes
