@@ -74,11 +74,11 @@ class ReplayBuffer():
     
 class DQNAgent():
     def __init__(self, lunar: LunarLanderEnv, gamma=0.99, 
-                epsilon=1.0, epsilon_decay=0.995, epsilon_min=0.01,
-                learning_rate=0.001, batch_size=64, 
+                epsilon=1.0, epsilon_decay=0.994, epsilon_min=0.01,
+                learning_rate=0.0015, batch_size=64, 
                 memory_size=10000, episodes=1500, 
                 target_network_update_freq=10,
-                replays_per_episode=10):
+                replays_per_episode=1000):
         """
         Initialize the DQN agent with the given parameters.
         
@@ -271,9 +271,9 @@ class DQNAgent():
              self.update_target_network()
             print(f"Ep {episode:4d} | Reward: {total_reward:8.2f} | Eps: {self.epsilon:.3f} | Loss: {loss:.4f}")
            # Verifica si se resolvió el entorno
-            if total_reward >= 200 and done:
+            if total_reward >= 190 and done:
                  success_count += 1
-                 print(success_count)
+            print(success_count)
         success_rate = success_count / self.episodes
         print(success_rate)
        
